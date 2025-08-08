@@ -38,20 +38,23 @@ async function aiRewrite(text: string, apiKey: string): Promise<string> {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: "gpt-4.1-2025-04-14",
-      messages: [
-        { role: "system", content: "You rewrite text to be inclusive, plain, accessible, and easy to understand while preserving meaning." },
-        { role: "user", content: `Rewrite to be accessible and inclusive. Keep tone professional, simplify jargon, and keep structure.\n\n${text}` },
-      ],
-      temperature: 0.3,
-    }),
-  });
-  if (!res.ok) throw new Error(`OpenAI error ${res.status}`);
-  const data = await res.json();
-  const content = data.choices?.[0]?.message?.content?.trim();
-  if (!content) throw new Error("No content returned");
-  return content;
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "You rewrite text to be inclusive, plain, accessible, and easy to understand while preserving meaning." },
+          { role: "user", content: `Rewrite to be accessible and inclusive. Keep tone professional, simplify jargon, and keep structure.\n\n${text}` },
+        ],
+        temperature: 0.3,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const msg = data?.error?.message || `OpenAI error ${res.status}`;
+      throw new Error(msg);
+    }
+    const content = data.choices?.[0]?.message?.content?.trim();
+    if (!content) throw new Error("No content returned");
+    return content;
 }
 
 const AccessibilityAnalyzer = () => {
@@ -115,15 +118,46 @@ const AccessibilityAnalyzer = () => {
   const exportPDF = async () => {
     const el = reportRef.current;
     if (!el) return;
-    const canvas = await html2canvas(el, { backgroundColor: '#ffffff', scale: 2 });
-    const imgData = canvas.toDataURL('image/png');
+    const canvas = await html2canvas(el, { backgroundColor: '#ffffff', scale: 2, useCORS: true, windowWidth: el.scrollWidth, windowHeight: el.scrollHeight });
+
     const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const ratio = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
-    const imgWidth = canvas.width * ratio;
-    const imgHeight = canvas.height * ratio;
-    pdf.addImage(imgData, 'PNG', (pageWidth - imgWidth) / 2, 24, imgWidth, imgHeight);
+    const margin = 24;
+    const printableWidth = pageWidth - margin * 2;
+    const printableHeight = pageHeight - margin * 2;
+
+    const pageCanvas = document.createElement('canvas');
+    const pageCtx = pageCanvas.getContext('2d')!;
+    const pageWidthPx = canvas.width;
+    const pageHeightPx = Math.floor(pageWidthPx * printableHeight / printableWidth);
+    pageCanvas.width = pageWidthPx;
+    pageCanvas.height = pageHeightPx;
+
+    let renderedHeight = 0;
+    while (renderedHeight < canvas.height) {
+      pageCtx.clearRect(0, 0, pageWidthPx, pageHeightPx);
+      pageCtx.drawImage(
+        canvas,
+        0,
+        renderedHeight,
+        pageWidthPx,
+        Math.min(pageHeightPx, canvas.height - renderedHeight),
+        0,
+        0,
+        pageWidthPx,
+        Math.min(pageHeightPx, canvas.height - renderedHeight)
+      );
+      const pageData = pageCanvas.toDataURL('image/png');
+      if (renderedHeight === 0) {
+        pdf.addImage(pageData, 'PNG', margin, margin, printableWidth, printableHeight);
+      } else {
+        pdf.addPage();
+        pdf.addImage(pageData, 'PNG', margin, margin, printableWidth, printableHeight);
+      }
+      renderedHeight += pageHeightPx;
+    }
+
     pdf.save('accessibility-report.pdf');
   };
 

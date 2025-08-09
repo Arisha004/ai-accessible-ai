@@ -10,9 +10,10 @@ import { toast } from "@/hooks/use-toast";
 import { computeReadability } from "./utils";
 import { findInclusiveLanguageIssues } from "./language";
 import { extractColorsFromHtml, sampleContrastChecks } from "./contrast";
-import { Download, History, KeyRound, Wand2 } from "lucide-react";
+import { Download, History, Wand2 } from "lucide-react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { supabase } from "@/integrations/supabase/client";
 
 function useLocalStorage<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(() => {
@@ -34,35 +35,14 @@ type Analysis = {
   createdAt: number;
 };
 
-async function aiRewrite(text: string, apiKey: string): Promise<string> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: "You rewrite text to be inclusive, plain, accessible, and easy to understand while preserving meaning." },
-          { role: "user", content: `Rewrite to be accessible and inclusive. Keep tone professional, simplify jargon, and keep structure.\n\n${text}` },
-        ],
-        temperature: 0.3,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      const msg = data?.error?.message || `OpenAI error ${res.status}`;
-      throw new Error(msg);
-    }
-    const content = data.choices?.[0]?.message?.content?.trim();
-    if (!content) throw new Error("No content returned");
-    return content;
-}
+// AI rewrite moved to Supabase Edge Function (generate-with-ai)
 
 const AccessibilityAnalyzer = () => {
   const [tab, setTab] = useState("text");
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
   const [simulateCB, setSimulateCB] = useState(false);
-  const [apiKey, setApiKey] = useLocalStorage<string>("accessibly_openai_key", "");
+  
   const [history, setHistory] = useLocalStorage<Analysis[]>("accessibly_history", []);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const reportRef = useRef<HTMLDivElement>(null);
@@ -81,28 +61,31 @@ const AccessibilityAnalyzer = () => {
   const fetchAndAnalyze = async () => {
     if (!url) return;
     try {
-      const res = await fetch(url, { mode: "cors" });
-      const html = await res.text();
-      const extracted = html.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+      const { data, error } = await supabase.functions.invoke('fetch-url', { body: { url } });
+      if (error) throw error;
+      const html: string = data?.html || '';
+      const extracted: string = data?.text || '';
       setText(extracted.slice(0, 20000));
       const colorsFound = extractColorsFromHtml(html);
       setAnalysis({ text: extracted, readability: computeReadability(extracted), inclusive: findInclusiveLanguageIssues(extracted), colors: sampleContrastChecks(colorsFound), createdAt: Date.now() });
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      toast({ title: "Could not fetch page", description: "This site may block cross-origin requests. Try pasting the content instead." });
+      toast({ title: 'Could not fetch page', description: e?.message || 'Please check the URL and try again.' });
     }
   };
 
   const onRewrite = async () => {
-    if (!apiKey) { toast({ title: "OpenAI key required", description: "Click the key icon to set your API key." }); return; }
-    if (!text.trim()) { toast({ title: "No text", description: "Paste text first." }); return; }
+    if (!text.trim()) { toast({ title: 'No text', description: 'Paste text first.' }); return; }
     try {
       setLoadingAI(true);
-      const result = await aiRewrite(text, apiKey);
+      const { data, error } = await supabase.functions.invoke('generate-with-ai', { body: { prompt: text } });
+      if (error) throw error;
+      const result: string = data?.generatedText || '';
+      if (!result) throw new Error('No AI content returned');
       setAnalysis(prev => prev ? { ...prev, ai: result } : { text, readability: readability!, inclusive, colors, ai: result, createdAt: Date.now() });
-      toast({ title: "AI rewrite ready", description: "Review and edit the result before exporting." });
+      toast({ title: 'AI rewrite ready', description: 'Review and edit the result before exporting.' });
     } catch (e: any) {
-      toast({ title: "AI error", description: e?.message || "Unable to rewrite now." });
+      toast({ title: 'AI error', description: e?.message || 'Unable to rewrite now.' });
     } finally {
       setLoadingAI(false);
     }
@@ -167,20 +150,24 @@ const AccessibilityAnalyzer = () => {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
-              <span>Main App Panel</span>
+              <span>Accessibility Checker</span>
               <div className="flex items-center gap-3">
-                <button aria-label="Set OpenAI API key" onClick={() => {
-                  const v = window.prompt('Enter your OpenAI API key');
-                  if (v) setApiKey(v);
-                }} className="text-muted-foreground hover:text-foreground"><KeyRound /></button>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Simulate Color Blindness</span>
+                  <span className="text-sm text-muted-foreground">Simulate color blindness</span>
                   <Switch checked={simulateCB} onCheckedChange={setSimulateCB} aria-label="Toggle color blindness simulation" />
                 </div>
               </div>
             </CardTitle>
           </CardHeader>
           <CardContent>
+            <aside aria-label="How to use" className="mb-6 text-sm text-muted-foreground">
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Paste text or enter a website URL.</li>
+                <li>Click Analyze to see readability, language, and contrast.</li>
+                <li>Use Rewrite with AI to simplify wording (no API key needed).</li>
+                <li>Export PDF to save or share the report.</li>
+              </ol>
+            </aside>
             <div className="grid gap-6 md:grid-cols-2">
               {/* Left: Inputs */}
               <div>

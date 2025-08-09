@@ -61,10 +61,24 @@ const AccessibilityAnalyzer = () => {
   const fetchAndAnalyze = async () => {
     if (!url) return;
     try {
-      const { data, error } = await supabase.functions.invoke('fetch-url', { body: { url } });
-      if (error) throw error;
+      const safeUrl = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+      const { data, error } = await supabase.functions.invoke('fetch-url', { body: { url: safeUrl } });
+      if (error) {
+        let desc = error.message || 'Fetch failed';
+        try {
+          const ctx = (error as any).context;
+          if (ctx && typeof ctx.json === 'function') {
+            const body = await ctx.json();
+            if (body?.error) desc = body.error;
+          }
+        } catch {}
+        throw new Error(desc);
+      }
       const html: string = data?.html || '';
       const extracted: string = data?.text || '';
+      if (!extracted) {
+        throw new Error('No text could be extracted from this page.');
+      }
       setText(extracted.slice(0, 20000));
       const colorsFound = extractColorsFromHtml(html);
       setAnalysis({ text: extracted, readability: computeReadability(extracted), inclusive: findInclusiveLanguageIssues(extracted), colors: sampleContrastChecks(colorsFound), createdAt: Date.now() });

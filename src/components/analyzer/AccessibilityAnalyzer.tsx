@@ -10,6 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { computeReadability } from "./utils";
 import { findInclusiveLanguageIssues } from "./language";
 import { extractColorsFromHtml, sampleContrastChecks } from "./contrast";
+import { localRewrite } from "./localRewrite";
 import { Download, History, Wand2 } from "lucide-react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -35,7 +36,7 @@ type Analysis = {
   createdAt: number;
 };
 
-// AI rewrite moved to Supabase Edge Function (generate-with-ai)
+// AI rewrite is optional; we also support local fallback (no key required)
 
 const AccessibilityAnalyzer = () => {
   const [tab, setTab] = useState("text");
@@ -91,26 +92,20 @@ const AccessibilityAnalyzer = () => {
 
   const onRewrite = async () => {
     if (!text.trim()) { toast({ title: 'No text', description: 'Paste text first.' }); return; }
+    setLoadingAI(true);
     try {
-      setLoadingAI(true);
+      // Try server-side AI first (if configured)
       const { data, error } = await supabase.functions.invoke('generate-with-ai', { body: { prompt: text } });
-      if (error) {
-        let desc = error.message || 'AI service failed';
-        try {
-          const ctx = (error as any).context;
-          if (ctx && typeof ctx.json === 'function') {
-            const body = await ctx.json();
-            if (body?.error) desc = body.error;
-          }
-        } catch {}
-        throw new Error(desc);
-      }
+      if (error) throw error;
       const result: string = data?.generatedText || '';
       if (!result) throw new Error('No AI content returned');
       setAnalysis(prev => prev ? { ...prev, ai: result } : { text, readability: readability!, inclusive, colors, ai: result, createdAt: Date.now() });
-      toast({ title: 'AI rewrite ready', description: 'Review and edit the result before exporting.' });
-    } catch (e: any) {
-      toast({ title: 'AI error', description: e?.message || 'Unable to rewrite now.' });
+      toast({ title: 'Rewrite ready', description: 'AI rewrite generated.' });
+    } catch (_) {
+      // Fallback: local rewrite (no API key required)
+      const result = localRewrite(text);
+      setAnalysis(prev => prev ? { ...prev, ai: result } : { text, readability: readability!, inclusive, colors, ai: result, createdAt: Date.now() });
+      toast({ title: 'Rewrite ready (Local)', description: 'Generated without an AI key.' });
     } finally {
       setLoadingAI(false);
     }
@@ -189,7 +184,7 @@ const AccessibilityAnalyzer = () => {
               <ol className="list-decimal list-inside space-y-1">
                 <li>Paste text or enter a website URL, then click Analyze or Fetch & Analyze.</li>
                 <li>Review readability, inclusive language, and contrast results.</li>
-                <li>Use Rewrite with AI to simplify wording (requires server key).</li>
+                <li>Use Rewrite to simplify wording (works locally; AI optional if configured).</li>
                 <li>Export PDF to save or share the report, or Save to keep recent results.</li>
               </ol>
             </aside>
@@ -277,10 +272,10 @@ const AccessibilityAnalyzer = () => {
                   </div>
 
                   <div>
-                    <Badge variant="secondary">AI Rewrite</Badge>
-                    <Textarea className="mt-2" rows={8} value={analysis?.ai || ""} onChange={(e) => setAnalysis(prev => prev ? { ...prev, ai: e.target.value } : null)} placeholder="Run AI rewrite to populate…" />
+                    <Badge variant="secondary">Rewrite</Badge>
+                    <Textarea className="mt-2" rows={8} value={analysis?.ai || ""} onChange={(e) => setAnalysis(prev => prev ? { ...prev, ai: e.target.value } : null)} placeholder="Run rewrite to populate…" />
                     <div className="mt-2 flex gap-2">
-                      <Button onClick={onRewrite} disabled={loadingAI}><Wand2 className="mr-1 h-4 w-4" /> {loadingAI ? 'Rewriting…' : 'Rewrite with AI'}</Button>
+                      <Button onClick={onRewrite} disabled={loadingAI}><Wand2 className="mr-1 h-4 w-4" /> {loadingAI ? 'Rewriting…' : 'Rewrite'}</Button>
                       <Button variant="secondary" onClick={saveHistory} disabled={!analysis}>Save</Button>
                       <Button variant="outline" onClick={exportPDF}><Download className="mr-1 h-4 w-4" /> Export PDF</Button>
                     </div>

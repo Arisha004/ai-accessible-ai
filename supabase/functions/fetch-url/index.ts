@@ -6,9 +6,12 @@ const corsHeaders = {
 };
 
 function extractText(html: string) {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
+  // Remove scripts/styles and collapse whitespace, but keep alt text from images when possible
+  const withoutScripts = html.replace(/<script[\s\S]*?<\/script>/gi, "");
+  const withoutStyles = withoutScripts.replace(/<style[\s\S]*?<\/style>/gi, "");
+  // Replace images with their alt text to preserve meaning
+  const withAlt = withoutStyles.replace(/<img[^>]*alt=["']([^"']*)["'][^>]*>/gi, ' $1 ');
+  return withAlt
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();

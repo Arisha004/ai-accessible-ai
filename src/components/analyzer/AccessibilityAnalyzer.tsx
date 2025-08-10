@@ -56,6 +56,7 @@ const AccessibilityAnalyzer = () => {
     if (!text.trim()) { toast({ title: "Add some text", description: "Paste text or fetch a URL to analyze." }); return; }
     const a: Analysis = { text, readability, inclusive, colors, createdAt: Date.now(), ai: analysis?.ai } as Analysis;
     setAnalysis(a);
+    toast({ title: "Analysis complete", description: "Results updated. You can now Save or Export." });
   };
 
   const fetchAndAnalyze = async () => {
@@ -176,10 +177,10 @@ const AccessibilityAnalyzer = () => {
           <CardContent>
             <aside aria-label="How to use" className="mb-6 text-sm text-muted-foreground">
               <ol className="list-decimal list-inside space-y-1">
-                <li>Paste text or enter a website URL.</li>
-                <li>Click Analyze to see readability, language, and contrast.</li>
-                <li>Use Rewrite with AI to simplify wording (no API key needed).</li>
-                <li>Export PDF to save or share the report.</li>
+                <li>Paste text or enter a website URL, then click Analyze or Fetch & Analyze.</li>
+                <li>Review readability, inclusive language, and contrast results.</li>
+                <li>Use Rewrite with AI to simplify wording (requires server key).</li>
+                <li>Export PDF to save or share the report, or Save to keep recent results.</li>
               </ol>
             </aside>
             <div className="grid gap-6 md:grid-cols-2">
@@ -225,11 +226,12 @@ const AccessibilityAnalyzer = () => {
                 <div className="space-y-4 animate-fade-in">
                   <div className="flex items-center gap-3 flex-wrap">
                     <Badge variant="secondary">Readability</Badge>
-                    {readability ? (
+                    {(analysis?.readability || readability) ? (
                       <div className="flex items-center gap-2">
-                        <span className="text-sm">Ease: <strong>{readability.readingEase}</strong></span>
-                        <span className="text-sm">Grade: <strong>{readability.gradeLevel}</strong></span>
-                        <span className="text-sm text-muted-foreground">{readability.words} words, {readability.sentences} sentences</span>
+                        <span className="text-sm">Ease: <strong>{(analysis?.readability ?? readability)!.readingEase}</strong></span>
+                        <span className="text-sm">Grade: <strong>{(analysis?.readability ?? readability)!.gradeLevel}</strong></span>
+                        <span className="text-sm text-muted-foreground">{(analysis?.readability ?? readability)!.words} words, {(analysis?.readability ?? readability)!.sentences} sentences</span>
+                        {analysis?.createdAt ? <span className="text-xs text-muted-foreground">Analyzed {new Date(analysis.createdAt).toLocaleTimeString()}</span> : null}
                       </div>
                     ) : (
                       <span className="text-sm text-muted-foreground">No text yet</span>
@@ -239,8 +241,8 @@ const AccessibilityAnalyzer = () => {
                   <div>
                     <Badge variant="secondary">Inclusive Language</Badge>
                     <ul className="mt-2 space-y-2">
-                      {inclusive.length === 0 && <li className="text-sm text-muted-foreground">No issues detected.</li>}
-                      {inclusive.map((iss, idx) => (
+                      {(analysis?.inclusive ?? inclusive).length === 0 && <li className="text-sm text-muted-foreground">No issues detected.</li>}
+                      {(analysis?.inclusive ?? inclusive).map((iss, idx) => (
                         <li key={idx} className="text-sm">
                           <span className="text-destructive font-medium">{iss.term}</span> → <span className="text-primary font-medium">{iss.suggestion}</span>
                           <span className="text-muted-foreground"> • “…{iss.context}…”</span>
@@ -252,7 +254,7 @@ const AccessibilityAnalyzer = () => {
                   <div>
                     <Badge variant="secondary">Color Contrast</Badge>
                     <div className="mt-2 grid grid-cols-3 gap-2">
-                      {colors.map((c, i) => (
+                      {(analysis?.colors ?? colors).map((c, i) => (
                         <div key={i} className="rounded-md border p-2">
                           <div className="h-10 rounded mb-2" style={{ background: c.bg }}>
                             <div className="h-full w-full flex items-center justify-center" style={{ color: c.fg }}>Aa</div>
@@ -269,7 +271,7 @@ const AccessibilityAnalyzer = () => {
                     <Textarea className="mt-2" rows={8} value={analysis?.ai || ""} onChange={(e) => setAnalysis(prev => prev ? { ...prev, ai: e.target.value } : null)} placeholder="Run AI rewrite to populate…" />
                     <div className="mt-2 flex gap-2">
                       <Button onClick={onRewrite} disabled={loadingAI}><Wand2 className="mr-1 h-4 w-4" /> {loadingAI ? 'Rewriting…' : 'Rewrite with AI'}</Button>
-                      <Button variant="secondary" onClick={saveHistory}>Save</Button>
+                      <Button variant="secondary" onClick={saveHistory} disabled={!analysis}>Save</Button>
                       <Button variant="outline" onClick={exportPDF}><Download className="mr-1 h-4 w-4" /> Export PDF</Button>
                     </div>
                   </div>

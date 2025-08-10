@@ -28,9 +28,20 @@ serve(async (req) => {
       });
     }
 
-    const res = await fetch(url, { headers: { 'User-Agent': 'Supabase-Edge-Function/1.0' } });
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+      },
+      redirect: 'follow',
+    });
     if (!res.ok) {
-      return new Response(JSON.stringify({ error: `Failed to fetch: ${res.status}` }), {
+      const ct = res.headers.get('content-type') || '';
+      const body = ct.includes('application/json') ? await res.json().catch(() => ({})) : await res.text().catch(() => '');
+      const reason = typeof body === 'string' ? body.slice(0, 200) : body?.error || JSON.stringify(body).slice(0, 200);
+      return new Response(JSON.stringify({ error: `Failed to fetch: ${res.status} ${res.statusText}${reason ? ` - ${reason}` : ''}` }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

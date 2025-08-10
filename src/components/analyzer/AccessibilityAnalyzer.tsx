@@ -94,7 +94,17 @@ const AccessibilityAnalyzer = () => {
     try {
       setLoadingAI(true);
       const { data, error } = await supabase.functions.invoke('generate-with-ai', { body: { prompt: text } });
-      if (error) throw error;
+      if (error) {
+        let desc = error.message || 'AI service failed';
+        try {
+          const ctx = (error as any).context;
+          if (ctx && typeof ctx.json === 'function') {
+            const body = await ctx.json();
+            if (body?.error) desc = body.error;
+          }
+        } catch {}
+        throw new Error(desc);
+      }
       const result: string = data?.generatedText || '';
       if (!result) throw new Error('No AI content returned');
       setAnalysis(prev => prev ? { ...prev, ai: result } : { text, readability: readability!, inclusive, colors, ai: result, createdAt: Date.now() });

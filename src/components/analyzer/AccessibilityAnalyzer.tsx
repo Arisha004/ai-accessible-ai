@@ -15,6 +15,7 @@ import { Download, History, Wand2 } from "lucide-react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { supabase } from "@/integrations/supabase/client";
+import { diffWords } from "diff";
 function useLocalStorage<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(() => {
     const raw = localStorage.getItem(key);
@@ -305,6 +306,30 @@ const AccessibilityAnalyzer = () => {
                       <Button variant="secondary" onClick={saveHistory} disabled={!analysis}>Save</Button>
                       <Button variant="outline" onClick={exportPDF}><Download className="mr-1 h-4 w-4" /> Export PDF</Button>
                     </div>
+                    {analysis?.ai && (
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        <div>
+                          <div className="text-xs text-muted-foreground mb-1">Original</div>
+                          <div className="p-2 border rounded text-xs leading-relaxed">
+                            {diffWords(text, analysis.ai).map((part, idx) => (
+                              part.added ? null : (
+                                <span key={idx} className={part.removed ? 'bg-destructive/20 rounded px-0.5' : undefined}>{part.value}</span>
+                              )
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted-foreground mb-1">Rewritten</div>
+                          <div className="p-2 border rounded text-xs leading-relaxed">
+                            {diffWords(text, analysis.ai).map((part, idx) => (
+                              part.removed ? null : (
+                                <span key={idx} className={part.added ? 'bg-primary/20 rounded px-0.5' : undefined}>{part.value}</span>
+                              )
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

@@ -9,13 +9,13 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { computeReadability } from "./utils";
 import { findInclusiveLanguageIssues } from "./language";
-import { extractColorsFromHtml, sampleContrastChecks } from "./contrast";
+import { analyzeContrastInDom, type DomContrastResult } from "./contrastDom";
 import { localRewrite } from "./localRewrite";
 import { Download, History, Wand2 } from "lucide-react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { supabase } from "@/integrations/supabase/client";
-
+import { diffWords } from "diff";
 function useLocalStorage<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(() => {
     const raw = localStorage.getItem(key);
@@ -31,7 +31,7 @@ type Analysis = {
   text: string;
   readability: ReturnType<typeof computeReadability> | null;
   inclusive: ReturnType<typeof findInclusiveLanguageIssues>;
-  colors: ReturnType<typeof sampleContrastChecks>;
+  colors: DomContrastResult[];
   ai?: string;
   createdAt: number;
 };
@@ -51,7 +51,16 @@ const AccessibilityAnalyzer = () => {
 
   const readability = useMemo(() => text ? computeReadability(text) : null, [text]);
   const inclusive = useMemo(() => text ? findInclusiveLanguageIssues(text) : [], [text]);
-  const colors = useMemo(() => sampleContrastChecks(), []);
+  const [targetGrade, setTargetGrade] = useState<number>(6);
+  const defaultColors = useMemo(() => analyzeContrastInDom(), []);
+
+  const getReadingTime = (words: number) => Math.max(1, Math.round(words / 200));
+  const getComplexSentences = (t: string) => t
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map(s => ({ s, w: s.trim().split(/\s+/).filter(Boolean).length }))
+    .filter(x => x.w > 24)
+    .slice(0, 3);
+  const getLongWords = (t: string) => (t.match(/\b[\w'-]{13,}\b/g) || []).slice(0, 6);
 
   const performAnalyze = () => {
     if (!text.trim()) { toast({ title: "Add some text", description: "Paste text or fetch a URL to analyze." }); return; }

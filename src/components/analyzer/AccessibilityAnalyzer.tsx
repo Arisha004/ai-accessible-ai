@@ -15,7 +15,6 @@ import { Download, History, Wand2 } from "lucide-react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { supabase } from "@/integrations/supabase/client";
-import { diffWords } from "diff";
 function useLocalStorage<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(() => {
     const raw = localStorage.getItem(key);
@@ -43,7 +42,6 @@ const AccessibilityAnalyzer = () => {
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
   const [simulateCB, setSimulateCB] = useState(false);
-  
   const [history, setHistory] = useLocalStorage<Analysis[]>("accessibly_history", []);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const reportRef = useRef<HTMLDivElement>(null);
@@ -64,7 +62,8 @@ const AccessibilityAnalyzer = () => {
 
   const performAnalyze = () => {
     if (!text.trim()) { toast({ title: "Add some text", description: "Paste text or fetch a URL to analyze." }); return; }
-    const a: Analysis = { text, readability, inclusive, colors, createdAt: Date.now(), ai: analysis?.ai } as Analysis;
+    const colorsNow = analyzeContrastInDom();
+    const a: Analysis = { text, readability, inclusive, colors: colorsNow, createdAt: Date.now(), ai: analysis?.ai } as Analysis;
     setAnalysis(a);
     toast({ title: "Analysis complete", description: "Results updated. You can now Save or Export." });
   };
@@ -91,8 +90,8 @@ const AccessibilityAnalyzer = () => {
         throw new Error('No text could be extracted from this page.');
       }
       setText(extracted.slice(0, 20000));
-      const colorsFound = extractColorsFromHtml(html);
-      setAnalysis({ text: extracted, readability: computeReadability(extracted), inclusive: findInclusiveLanguageIssues(extracted), colors: sampleContrastChecks(colorsFound), createdAt: Date.now() });
+      const domColors = analyzeContrastInDom();
+      setAnalysis({ text: extracted, readability: computeReadability(extracted), inclusive: findInclusiveLanguageIssues(extracted), colors: domColors, createdAt: Date.now() });
     } catch (e: any) {
       console.error(e);
       toast({ title: 'Could not fetch page', description: e?.message || 'Please check the URL and try again.' });
@@ -103,18 +102,9 @@ const AccessibilityAnalyzer = () => {
     if (!text.trim()) { toast({ title: 'No text', description: 'Paste text first.' }); return; }
     setLoadingAI(true);
     try {
-      // Try server-side AI first (if configured)
-      const { data, error } = await supabase.functions.invoke('generate-with-ai', { body: { prompt: text } });
-      if (error) throw error;
-      const result: string = data?.generatedText || '';
-      if (!result) throw new Error('No AI content returned');
-      setAnalysis(prev => prev ? { ...prev, ai: result } : { text, readability: readability!, inclusive, colors, ai: result, createdAt: Date.now() });
-      toast({ title: 'Rewrite ready', description: 'AI rewrite generated.' });
-    } catch (_) {
-      // Fallback: local rewrite (no API key required)
-      const result = localRewrite(text);
-      setAnalysis(prev => prev ? { ...prev, ai: result } : { text, readability: readability!, inclusive, colors, ai: result, createdAt: Date.now() });
-      toast({ title: 'Rewrite ready (Local)', description: 'Generated without an AI key.' });
+      const result = localRewrite(text, targetGrade);
+      setAnalysis(prev => prev ? { ...prev, ai: result } : { text, readability: readability!, inclusive, colors: defaultColors, ai: result, createdAt: Date.now() });
+      toast({ title: 'Rewrite ready', description: `Simplified toward Grade ${targetGrade}.` });
     } finally {
       setLoadingAI(false);
     }
@@ -208,15 +198,21 @@ const AccessibilityAnalyzer = () => {
                   <TabsContent value="text" className="space-y-3">
                     <label htmlFor="paste" className="sr-only">Paste text</label>
                     <Textarea id="paste" value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste content to analyze" rows={12} />
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-3">
                       <Button onClick={performAnalyze}>Analyze</Button>
                       <Button variant="secondary" onClick={() => setText("")}>Clear</Button>
+                      <label className="text-sm text-muted-foreground flex items-center gap-2">Target grade
+                        <Input type="number" min={1} max={12} className="w-16" value={targetGrade} onChange={(e) => setTargetGrade(Number(e.target.value) || 6)} />
+                      </label>
                     </div>
                   </TabsContent>
                   <TabsContent value="url" className="space-y-3">
                     <label htmlFor="url" className="sr-only">Website URL</label>
                     <Input id="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com" />
-                    <Button onClick={fetchAndAnalyze}>Fetch & Analyze</Button>
+                    <div className="flex items-center gap-3">
+                      <Button onClick={fetchAndAnalyze}>Fetch & Analyze</Button>
+                      <div className="text-xs text-muted-foreground">Target grade: <strong>{targetGrade}</strong></div>
+                    </div>
                   </TabsContent>
                 </Tabs>
 
@@ -241,10 +237,12 @@ const AccessibilityAnalyzer = () => {
                   <div className="flex items-center gap-3 flex-wrap">
                     <Badge variant="secondary">Readability</Badge>
                     {(analysis?.readability || readability) ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm">Ease: <strong>{(analysis?.readability ?? readability)!.readingEase}</strong></span>
                         <span className="text-sm">Grade: <strong>{(analysis?.readability ?? readability)!.gradeLevel}</strong></span>
                         <span className="text-sm text-muted-foreground">{(analysis?.readability ?? readability)!.words} words, {(analysis?.readability ?? readability)!.sentences} sentences</span>
+                        <span className="text-xs text-muted-foreground">~{getReadingTime((analysis?.readability ?? readability)!.words)} min read</span>
+                        <span className="text-xs text-muted-foreground">Target Grade: {targetGrade} • Aim for Ease 60–80, Grade 8–10</span>
                         {analysis?.createdAt ? <span className="text-xs text-muted-foreground">Analyzed {new Date(analysis.createdAt).toLocaleTimeString()}</span> : null}
                       </div>
                     ) : (
@@ -263,18 +261,36 @@ const AccessibilityAnalyzer = () => {
                         </li>
                       ))}
                     </ul>
+                    {text && (
+                      <div className="mt-3 space-y-1">
+                        <div className="text-xs text-muted-foreground">Complex sentences:</div>
+                        <ul className="list-disc pl-5 text-xs space-y-1">
+                          {getComplexSentences(text).map((c, i) => (<li key={i} className="truncate" title={c.s}>{c.s}</li>))}
+                        </ul>
+                        <div className="text-xs text-muted-foreground mt-2">Long words:</div>
+                        <div className="text-xs text-muted-foreground">{getLongWords(text).join(', ')}</div>
+                      </div>
+                    )}
                   </div>
 
                   <div>
                     <Badge variant="secondary">Color Contrast</Badge>
-                    <div className="mt-2 grid grid-cols-3 gap-2">
-                      {(analysis?.colors ?? colors).map((c, i) => (
+                    <div className="mt-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {(analysis?.colors ?? defaultColors).map((c, i) => (
                         <div key={i} className="rounded-md border p-2">
                           <div className="h-10 rounded mb-2" style={{ background: c.bg }}>
                             <div className="h-full w-full flex items-center justify-center" style={{ color: c.fg }}>Aa</div>
                           </div>
                           <div className="text-xs">{c.fg} on {c.bg}</div>
                           <div className={`text-xs ${c.passes ? 'text-primary' : 'text-destructive'}`}>Ratio {c.ratio} {c.passes ? 'Pass' : 'Fail'}</div>
+                          <div className="text-[10px] text-muted-foreground" title={c.snippet}>
+                            “{c.snippet}”
+                          </div>
+                          <div className="text-[10px] text-muted-foreground mt-1 truncate" title={c.selector}>{c.selector}</div>
+                          <div className="text-[10px] text-muted-foreground">Font {c.fontSize}px</div>
+                          {!c.passes && c.suggestedFg && (
+                            <div className="text-[10px] text-muted-foreground">Try: <span className="font-medium" style={{ color: c.suggestedFg }}>{c.suggestedFg}</span></div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -283,8 +299,9 @@ const AccessibilityAnalyzer = () => {
                   <div>
                     <Badge variant="secondary">Rewrite</Badge>
                     <Textarea className="mt-2" rows={8} value={analysis?.ai || ""} onChange={(e) => setAnalysis(prev => prev ? { ...prev, ai: e.target.value } : null)} placeholder="Run rewrite to populate…" />
-                    <div className="mt-2 flex gap-2">
+                    <div className="mt-2 flex items-center gap-3 flex-wrap">
                       <Button onClick={onRewrite} disabled={loadingAI}><Wand2 className="mr-1 h-4 w-4" /> {loadingAI ? 'Rewriting…' : 'Rewrite'}</Button>
+                      <div className="text-xs text-muted-foreground">Target Grade: {targetGrade}</div>
                       <Button variant="secondary" onClick={saveHistory} disabled={!analysis}>Save</Button>
                       <Button variant="outline" onClick={exportPDF}><Download className="mr-1 h-4 w-4" /> Export PDF</Button>
                     </div>

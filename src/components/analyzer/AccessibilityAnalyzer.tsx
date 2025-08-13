@@ -124,86 +124,136 @@ const AccessibilityAnalyzer = () => {
     
     // Clone the element to avoid modifying the original
     const clonedEl = el.cloneNode(true) as HTMLElement;
-    clonedEl.style.width = '800px';
-    clonedEl.style.minHeight = 'auto';
-    clonedEl.style.fontSize = '14px';
-    clonedEl.style.lineHeight = '1.6';
-    clonedEl.style.padding = '20px';
-    clonedEl.style.backgroundColor = '#ffffff';
-    clonedEl.style.color = '#000000';
     
-    // Append to body temporarily for rendering
-    document.body.appendChild(clonedEl);
+    // Create a temporary container with fixed styles
+    const container = document.createElement('div');
+    container.style.position = 'absolute';
+    container.style.top = '-9999px';
+    container.style.left = '-9999px';
+    container.style.width = '800px';
+    container.style.minHeight = 'auto';
+    container.style.backgroundColor = '#ffffff';
+    container.style.fontFamily = 'Arial, sans-serif';
+    container.style.color = '#000000';
+    container.style.padding = '30px';
+    container.style.boxSizing = 'border-box';
+    
+    // Style the cloned element
+    clonedEl.style.width = '100%';
+    clonedEl.style.fontSize = '16px';
+    clonedEl.style.lineHeight = '1.8';
+    clonedEl.style.color = '#000000';
+    clonedEl.style.backgroundColor = 'transparent';
+    
+    // Force all text elements to be black
+    const allElements = clonedEl.getElementsByTagName('*');
+    for (let i = 0; i < allElements.length; i++) {
+      const elem = allElements[i] as HTMLElement;
+      if (elem.tagName !== 'DIV' || !elem.style.background) {
+        elem.style.color = '#000000';
+      }
+      elem.style.wordWrap = 'break-word';
+      elem.style.whiteSpace = 'normal';
+      elem.style.overflow = 'visible';
+      
+      // Ensure badges and buttons are visible
+      if (elem.classList.contains('bg-') || elem.tagName === 'BUTTON') {
+        elem.style.backgroundColor = '#f5f5f5';
+        elem.style.border = '1px solid #ddd';
+        elem.style.color = '#000000';
+        elem.style.padding = '4px 8px';
+        elem.style.borderRadius = '4px';
+      }
+    }
+    
+    container.appendChild(clonedEl);
+    document.body.appendChild(container);
     
     try {
-      const canvas = await html2canvas(clonedEl, { 
-        backgroundColor: '#ffffff', 
-        scale: 1.5, 
+      // Wait for fonts to load
+      await document.fonts.ready;
+      
+      const canvas = await html2canvas(container, { 
+        backgroundColor: '#ffffff',
+        scale: 2,
         useCORS: true,
         allowTaint: true,
-        foreignObjectRendering: true,
+        foreignObjectRendering: false,
+        logging: false,
         width: 800,
-        height: clonedEl.scrollHeight
+        height: container.scrollHeight,
+        x: 0,
+        y: 0
       });
 
-      const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+      const pdf = new jsPDF({ 
+        unit: 'pt', 
+        format: 'a4', 
+        orientation: 'portrait',
+        compress: true
+      });
+      
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 40;
+      const margin = 50;
       const printableWidth = pageWidth - margin * 2;
       const printableHeight = pageHeight - margin * 2;
 
-      // Calculate the aspect ratio and scaling
       const imgWidth = canvas.width;
       const imgHeight = canvas.height;
-      const ratio = Math.min(printableWidth / imgWidth, printableHeight / imgHeight);
-      const scaledWidth = imgWidth * ratio;
-      const scaledHeight = imgHeight * ratio;
+      
+      // Calculate scaling to fit page width
+      const scale = printableWidth / imgWidth;
+      const scaledHeight = imgHeight * scale;
 
       // If content fits on one page
       if (scaledHeight <= printableHeight) {
-        const imgData = canvas.toDataURL('image/jpeg', 0.9);
-        pdf.addImage(imgData, 'JPEG', margin, margin, scaledWidth, scaledHeight);
+        const imgData = canvas.toDataURL('image/png', 1.0);
+        pdf.addImage(imgData, 'PNG', margin, margin, printableWidth, scaledHeight);
       } else {
-        // Multi-page handling
-        const pageCanvas = document.createElement('canvas');
-        const pageCtx = pageCanvas.getContext('2d')!;
-        const pageHeightPx = Math.floor(imgHeight * printableHeight / scaledHeight);
-        pageCanvas.width = imgWidth;
-        pageCanvas.height = pageHeightPx;
-
-        let renderedHeight = 0;
-        let pageNum = 0;
+        // Multi-page handling with better sizing
+        const pagesNeeded = Math.ceil(scaledHeight / printableHeight);
+        const pageHeightCanvas = Math.floor(imgHeight / pagesNeeded);
         
-        while (renderedHeight < imgHeight) {
-          const remainingHeight = Math.min(pageHeightPx, imgHeight - renderedHeight);
-          pageCanvas.height = remainingHeight;
+        for (let page = 0; page < pagesNeeded; page++) {
+          const startY = page * pageHeightCanvas;
+          const endY = Math.min(startY + pageHeightCanvas, imgHeight);
+          const currentPageHeight = endY - startY;
           
-          pageCtx.clearRect(0, 0, imgWidth, remainingHeight);
+          // Create canvas for this page
+          const pageCanvas = document.createElement('canvas');
+          const pageCtx = pageCanvas.getContext('2d')!;
+          pageCanvas.width = imgWidth;
+          pageCanvas.height = currentPageHeight;
+          
+          // Draw the portion of the main canvas for this page
+          pageCtx.fillStyle = '#ffffff';
+          pageCtx.fillRect(0, 0, imgWidth, currentPageHeight);
           pageCtx.drawImage(
             canvas,
-            0, renderedHeight, imgWidth, remainingHeight,
-            0, 0, imgWidth, remainingHeight
+            0, startY, imgWidth, currentPageHeight,
+            0, 0, imgWidth, currentPageHeight
           );
           
-          const pageData = pageCanvas.toDataURL('image/jpeg', 0.9);
+          const pageData = pageCanvas.toDataURL('image/png', 1.0);
           
-          if (pageNum === 0) {
-            pdf.addImage(pageData, 'JPEG', margin, margin, scaledWidth, remainingHeight * ratio);
-          } else {
-            pdf.addPage();
-            pdf.addImage(pageData, 'JPEG', margin, margin, scaledWidth, remainingHeight * ratio);
-          }
+          if (page > 0) pdf.addPage();
           
-          renderedHeight += pageHeightPx;
-          pageNum++;
+          const scaledPageHeight = currentPageHeight * scale;
+          pdf.addImage(pageData, 'PNG', margin, margin, printableWidth, scaledPageHeight);
         }
       }
 
       pdf.save('accessibility-report.pdf');
+      toast({ title: "PDF Exported", description: "Accessibility report saved successfully." });
+    } catch (error) {
+      console.error('PDF export error:', error);
+      toast({ title: "Export Failed", description: "Could not generate PDF. Please try again." });
     } finally {
       // Clean up
-      document.body.removeChild(clonedEl);
+      if (container.parentNode) {
+        document.body.removeChild(container);
+      }
     }
   };
 

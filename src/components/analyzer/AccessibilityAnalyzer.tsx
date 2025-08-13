@@ -121,47 +121,90 @@ const AccessibilityAnalyzer = () => {
   const exportPDF = async () => {
     const el = reportRef.current;
     if (!el) return;
-    const canvas = await html2canvas(el, { backgroundColor: '#ffffff', scale: 2, useCORS: true, windowWidth: el.scrollWidth, windowHeight: el.scrollHeight });
+    
+    // Clone the element to avoid modifying the original
+    const clonedEl = el.cloneNode(true) as HTMLElement;
+    clonedEl.style.width = '800px';
+    clonedEl.style.minHeight = 'auto';
+    clonedEl.style.fontSize = '14px';
+    clonedEl.style.lineHeight = '1.6';
+    clonedEl.style.padding = '20px';
+    clonedEl.style.backgroundColor = '#ffffff';
+    clonedEl.style.color = '#000000';
+    
+    // Append to body temporarily for rendering
+    document.body.appendChild(clonedEl);
+    
+    try {
+      const canvas = await html2canvas(clonedEl, { 
+        backgroundColor: '#ffffff', 
+        scale: 1.5, 
+        useCORS: true,
+        allowTaint: true,
+        foreignObjectRendering: true,
+        width: 800,
+        height: clonedEl.scrollHeight
+      });
 
-    const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 24;
-    const printableWidth = pageWidth - margin * 2;
-    const printableHeight = pageHeight - margin * 2;
+      const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 40;
+      const printableWidth = pageWidth - margin * 2;
+      const printableHeight = pageHeight - margin * 2;
 
-    const pageCanvas = document.createElement('canvas');
-    const pageCtx = pageCanvas.getContext('2d')!;
-    const pageWidthPx = canvas.width;
-    const pageHeightPx = Math.floor(pageWidthPx * printableHeight / printableWidth);
-    pageCanvas.width = pageWidthPx;
-    pageCanvas.height = pageHeightPx;
+      // Calculate the aspect ratio and scaling
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = Math.min(printableWidth / imgWidth, printableHeight / imgHeight);
+      const scaledWidth = imgWidth * ratio;
+      const scaledHeight = imgHeight * ratio;
 
-    let renderedHeight = 0;
-    while (renderedHeight < canvas.height) {
-      pageCtx.clearRect(0, 0, pageWidthPx, pageHeightPx);
-      pageCtx.drawImage(
-        canvas,
-        0,
-        renderedHeight,
-        pageWidthPx,
-        Math.min(pageHeightPx, canvas.height - renderedHeight),
-        0,
-        0,
-        pageWidthPx,
-        Math.min(pageHeightPx, canvas.height - renderedHeight)
-      );
-      const pageData = pageCanvas.toDataURL('image/png');
-      if (renderedHeight === 0) {
-        pdf.addImage(pageData, 'PNG', margin, margin, printableWidth, printableHeight);
+      // If content fits on one page
+      if (scaledHeight <= printableHeight) {
+        const imgData = canvas.toDataURL('image/jpeg', 0.9);
+        pdf.addImage(imgData, 'JPEG', margin, margin, scaledWidth, scaledHeight);
       } else {
-        pdf.addPage();
-        pdf.addImage(pageData, 'PNG', margin, margin, printableWidth, printableHeight);
-      }
-      renderedHeight += pageHeightPx;
-    }
+        // Multi-page handling
+        const pageCanvas = document.createElement('canvas');
+        const pageCtx = pageCanvas.getContext('2d')!;
+        const pageHeightPx = Math.floor(imgHeight * printableHeight / scaledHeight);
+        pageCanvas.width = imgWidth;
+        pageCanvas.height = pageHeightPx;
 
-    pdf.save('accessibility-report.pdf');
+        let renderedHeight = 0;
+        let pageNum = 0;
+        
+        while (renderedHeight < imgHeight) {
+          const remainingHeight = Math.min(pageHeightPx, imgHeight - renderedHeight);
+          pageCanvas.height = remainingHeight;
+          
+          pageCtx.clearRect(0, 0, imgWidth, remainingHeight);
+          pageCtx.drawImage(
+            canvas,
+            0, renderedHeight, imgWidth, remainingHeight,
+            0, 0, imgWidth, remainingHeight
+          );
+          
+          const pageData = pageCanvas.toDataURL('image/jpeg', 0.9);
+          
+          if (pageNum === 0) {
+            pdf.addImage(pageData, 'JPEG', margin, margin, scaledWidth, remainingHeight * ratio);
+          } else {
+            pdf.addPage();
+            pdf.addImage(pageData, 'JPEG', margin, margin, scaledWidth, remainingHeight * ratio);
+          }
+          
+          renderedHeight += pageHeightPx;
+          pageNum++;
+        }
+      }
+
+      pdf.save('accessibility-report.pdf');
+    } finally {
+      // Clean up
+      document.body.removeChild(clonedEl);
+    }
   };
 
   return (

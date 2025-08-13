@@ -70,12 +70,25 @@ const AccessibilityAnalyzer = () => {
   };
 
   const fetchAndAnalyze = async () => {
-    if (!url) return;
+    if (!url.trim()) {
+      toast({ title: "Enter URL", description: "Please enter a website URL to analyze." });
+      return;
+    }
+    
     try {
-      const safeUrl = /^https?:\/\//i.test(url) ? url : `https://${url}`;
-      const { data, error } = await supabase.functions.invoke('fetch-url', { body: { url: safeUrl } });
+      // Validate and normalize URL
+      const safeUrl = /^https?:\/\//i.test(url.trim()) ? url.trim() : `https://${url.trim()}`;
+      
+      toast({ title: "Fetching...", description: `Loading content from ${safeUrl}` });
+      
+      const { data, error } = await supabase.functions.invoke('fetch-url', { 
+        body: { url: safeUrl },
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
       if (error) {
-        let desc = error.message || 'Fetch failed';
+        console.error('Supabase function error:', error);
+        let desc = error.message || 'Failed to fetch webpage content';
         try {
           const ctx = (error as any).context;
           if (ctx && typeof ctx.json === 'function') {
@@ -85,17 +98,43 @@ const AccessibilityAnalyzer = () => {
         } catch {}
         throw new Error(desc);
       }
+
       const html: string = data?.html || '';
       const extracted: string = data?.text || '';
-      if (!extracted) {
-        throw new Error('No text could be extracted from this page.');
+      
+      console.log('Fetched data:', { htmlLength: html.length, textLength: extracted.length });
+      
+      if (!extracted || extracted.length < 10) {
+        throw new Error(`Unable to extract meaningful text from this webpage. The page might be protected by anti-bot measures, require JavaScript, or contain mostly non-text content.`);
       }
-      setText(extracted.slice(0, 20000));
+      
+      // Limit text to prevent memory issues
+      const limitedText = extracted.slice(0, 20000);
+      setText(limitedText);
+      
       const domColors = analyzeContrastInDom();
-      setAnalysis({ text: extracted, readability: computeReadability(extracted), inclusive: findInclusiveLanguageIssues(extracted), colors: domColors, createdAt: Date.now() });
+      const newAnalysis = { 
+        text: limitedText, 
+        readability: computeReadability(limitedText), 
+        inclusive: findInclusiveLanguageIssues(limitedText), 
+        colors: domColors, 
+        createdAt: Date.now() 
+      };
+      
+      setAnalysis(newAnalysis);
+      
+      toast({ 
+        title: "Analysis Complete", 
+        description: `Successfully analyzed ${limitedText.length.toLocaleString()} characters from ${safeUrl}` 
+      });
+      
     } catch (e: any) {
-      console.error(e);
-      toast({ title: 'Could not fetch page', description: e?.message || 'Please check the URL and try again.' });
+      console.error('Fetch and analyze error:', e);
+      toast({ 
+        title: 'Could not fetch page', 
+        description: e?.message || 'Please verify the URL is accessible and try again.',
+        variant: "destructive"
+      });
     }
   };
 

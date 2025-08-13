@@ -5,16 +5,46 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-function extractText(html: string) {
-  // Remove scripts/styles and collapse whitespace, but keep alt text from images when possible
-  const withoutScripts = html.replace(/<script[\s\S]*?<\/script>/gi, "");
-  const withoutStyles = withoutScripts.replace(/<style[\s\S]*?<\/style>/gi, "");
-  // Replace images with their alt text to preserve meaning
-  const withAlt = withoutStyles.replace(/<img[^>]*alt=["']([^"']*)["'][^>]*>/gi, ' $1 ');
-  return withAlt
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
+function extractText(html: string): string {
+  console.log('Original HTML length:', html.length);
+  
+  if (!html || typeof html !== 'string') {
+    console.log('Invalid HTML input');
+    return '';
+  }
+
+  // Remove script and style elements completely
+  let cleanHtml = html.replace(/<script[\s\S]*?<\/script>/gi, "");
+  cleanHtml = cleanHtml.replace(/<style[\s\S]*?<\/style>/gi, "");
+  cleanHtml = cleanHtml.replace(/<noscript[\s\S]*?<\/noscript>/gi, "");
+  
+  // Replace common block elements with spaces to preserve word boundaries
+  cleanHtml = cleanHtml.replace(/<\/?(div|p|br|h[1-6]|section|article|header|footer|nav|aside|main|ul|ol|li|blockquote|pre)[^>]*>/gi, ' ');
+  
+  // Extract alt text from images
+  cleanHtml = cleanHtml.replace(/<img[^>]*alt=["']([^"']*)["'][^>]*>/gi, ' $1 ');
+  
+  // Extract title attributes
+  cleanHtml = cleanHtml.replace(/title=["']([^"']*)["']/gi, ' $1 ');
+  
+  // Remove all remaining HTML tags
+  let text = cleanHtml.replace(/<[^>]+>/g, " ");
+  
+  // Clean up text
+  text = text
+    .replace(/&[a-zA-Z0-9#]+;/g, ' ') // Remove HTML entities
+    .replace(/\s+/g, ' ') // Collapse multiple spaces
+    .replace(/\n+/g, ' ') // Replace newlines with spaces
     .trim();
+  
+  console.log('Extracted text length:', text.length);
+  console.log('First 200 chars:', text.substring(0, 200));
+  
+  if (text.length < 50) {
+    console.log('Warning: Very short text extracted');
+  }
+  
+  return text;
 }
 
 serve(async (req) => {

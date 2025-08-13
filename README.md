@@ -213,10 +213,3 @@ npm i
 # Start development server
 npm run dev
 ```
-
-### Deployment
-Simply open [Lovable](https://lovable.dev/projects/3a4360a2-c709-4c5f-a855-f6932db9f183) and click on Share → Publish.
-
-### Custom Domain
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-Read more: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)

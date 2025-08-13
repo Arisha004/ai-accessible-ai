@@ -2,7 +2,7 @@
 
 > **A comprehensive web accessibility analysis tool that helps you create inclusive digital experiences**
 
-![Accessibility Checker Hero](src/assets/accessibility-checker-hero.jpg)
+![Accessibility Checker Hero](accessibly.jpg)
 
 [![Built with Lovable](https://img.shields.io/badge/Built%20with-Lovable-ff69b4)](https://lovable.dev)
 [![React](https://img.shields.io/badge/React-18.3.1-blue)](https://reactjs.org/)
@@ -10,7 +10,7 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-3.0-38B2AC)](https://tailwindcss.com/)
 [![Supabase](https://img.shields.io/badge/Supabase-Backend-green)](https://supabase.com/)
 
-**Made by [Arisha Mumtaz](https://github.com/arishamumtaz)**
+**Made by [Arisha Mumtaz](https://github.com/Arisha004/ai-accessible-ai)**
 
 ## ✨ Features
 
@@ -164,10 +164,6 @@ This tool helps you comply with:
 - **Readability Best Practices**
 - **Inclusive Language Guidelines**
 
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
-
 ### Development Setup
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/amazing-feature`
@@ -191,24 +187,16 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 Support
 
 - **Documentation**: [WCAG Guide](./docs/wcag-guide.md)
-- **Issues**: [GitHub Issues](https://github.com/yourusername/accessibility-checker/issues)
-- **Contact**: Made by [Arisha Mumtaz](mailto:your.email@example.com)
+- **Contact**: Made by [Arisha Mumtaz](mailto:arishamumtaz340@gmail.com)
 
 ---
 
 **✨ Make the web accessible for everyone - one analysis at a time!**
 
-[![Deploy to Lovable](https://img.shields.io/badge/Deploy%20to-Lovable-ff69b4?style=for-the-badge&logo=lovable)](https://lovable.dev)
 
 ## 💻 Development with Lovable
 
-**Project URL**: https://lovable.dev/projects/3a4360a2-c709-4c5f-a855-f6932db9f183
-
-### Using Lovable IDE
-Simply visit the [Lovable Project](https://lovable.dev/projects/3a4360a2-c709-4c5f-a855-f6932db9f183) and start prompting. Changes made via Lovable will be committed automatically to this repo.
-
-### Local Development
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+**Project URL**: https://preview--ai-accessible-ai.lovable.app/
 
 Requirements: Node.js & npm - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 

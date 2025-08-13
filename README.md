@@ -2,7 +2,7 @@
 
 > **A comprehensive web accessibility analysis tool that helps you create inclusive digital experiences**
 
-![Accessibility Checker Hero](accessibly.jpg)
+![Accessibility Checker System](accessibly.JPG)
 
 [![Built with Lovable](https://img.shields.io/badge/Built%20with-Lovable-ff69b4)](https://lovable.dev)
 [![React](https://img.shields.io/badge/React-18.3.1-blue)](https://reactjs.org/)
